@@ -2,10 +2,22 @@ const jwt = require('jsonwebtoken');
 //const tokenModel = require('../models/token-model');
 const {Token} = require('../models/authModel')
 class TokenService {
+    createResetPasswordToken(payload) {
+        return jwt.sign(payload, process.env.RESETPASSWORD_TOKEN_SECRET, {expiresIn: '3m'})
+    }
+    validateResetPasswordToken(token) {
+        try {
+            const data = jwt.verify(token, process.env.RESETPASSWORD_TOKEN_SECRET);
+            return data;
+        } catch (e) {
+            return null;
+        }
+    }
 
     createActivationToken(payload) {
         return jwt.sign(payload, process.env.ACTIVATION_TOKEN_SECRET, {expiresIn: '5m'})
     }
+ 
 
     validateActivationToken(token) {
         try {
@@ -40,7 +52,7 @@ class TokenService {
 
     generateTokens(payload) {
         const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '15m'})
-        const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {expiresIn: '30d'})
+        const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {expiresIn: '20d'})
         return {
             accessToken,
             refreshToken

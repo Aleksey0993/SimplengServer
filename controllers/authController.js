@@ -3,23 +3,24 @@ const {User} = require('../models/authModel')
 const tokenService = require('../service/tokenService')
 const mailService = require('../service/mailService')
 const UserDto = require('../dtos/user-dto')
+const { validationResult } = require('express-validator');
 class AuthController {
     async registration(req, res) {
       try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          const error = errors.array().reduce((err, item)=>{
+            return err + item.msg
+          },'')
+         
+           return res.status(400).json({ msg: error });
+         }
         const {email, password} = req.body
-            
-      //  if(!name || !email || !password)
-       //     return res.status(400).json({msg: "Please fill in all fields."})
-
-       // if(!validateEmail(email))
-       //     return res.status(400).json({msg: "Invalid emails."})
-
+        
         const user = await User.findOne({where:{email}}) 
-        if(user) return res.status(400).json({msg: "This email already exists."})
-
-       // if(password.length < 6)
-       //     return res.status(400).json({msg: "Password must be at least 6 characters."})
-
+       
+        if(user) return res.status(400).json({msg:"Данный email уже существует."})
+       
         const passwordHash = await bcrypt.hash(password, 12)
 
         const newUser = {
@@ -32,7 +33,7 @@ class AuthController {
         await mailService.sendActivationMail(email, url)
 
 
-        res.json({msg: "Register Success! Please activate your email to start."})
+        res.json({msg: `На ваш почтовый ящик ${email} было отправлено письмо для активации аккаунта!`})
       } catch (error) {
         return res.status(500).json({msg: error.message})
       }
@@ -47,15 +48,10 @@ class AuthController {
             const {email, password} = user
 
             const check = await User.findOne({where:{email}}) 
-            if(check) return res.status(400).json({msg:"This email already exists."})
-
-            // const newUser = new Users({
-            //     name, email, password
-            // })
-
-            // await newUser.save()
+            if(check) return res.status(400).json({msg:`${email} уже активирован! Перейдите в личный кабинет для авторизации!`})
+           
             await User.create({email,password})
-            res.json({msg: "Account has been activated!"})
+            res.json({msg: "Поздравляем! Ваш аккаунт был успешно активирован! Перейдите в личный кабинет для авторизации!"})
             
         } catch (error) {
             return res.status(500).json({msg: error.message})
@@ -65,30 +61,34 @@ class AuthController {
 
       async login(req, res) {
         try {
-          
-        //  await User.destroy({where:{id:1}})
-          
-        //  return res.json({msg:'Пользователь удален с бд '})
-          const {email, password, fingerprint} = req.body;
-        
-          
-          const user = await User.findOne({where:{email}})
-          if (!user) {
-            return res.status(400).json({msg:"Пользователь с данным email не найден!"})
-           }
-          const isPassEquals = await bcrypt.compare(password, user.password);
-           if (!isPassEquals) {
-            return res.status(400).json({msg:"Неверный пароль!"})
-           }
-           const userDto = new UserDto(user);
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) {
+            const error = errors.array().reduce((err, item)=>{
+              return err + item.msg
+            },'')
            
+             return res.status(400).json({ msg: error });
+           }
+        const {email, password, fingerprint} = req.body;
+             console.log('PASSWORD- ', password)
+          const user = await User.findOne({where:{email}})
+          if(!user){
+            return res.status(400).json({msg:"Неверный логин или пароль!"})
+          }
+          const isPassEquals = await bcrypt.compare(password, user.password);
+          if (!isPassEquals) {
+            return res.status(400).json({msg:"Неверный логин или пароль!"})
+           }
+       
+           const userDto = new UserDto(user);
+       
            const tokens = tokenService.generateTokens({...userDto});
            
            await tokenService.saveToken(userDto.id, tokens.refreshToken, fingerprint);
            res.cookie('refreshToken', 
                         tokens.refreshToken, 
                         { maxAge: 30 * 24 * 60 * 60 * 1000,
-                          path: '/api/auth/refresh', 
+                          path: '/api/auth', 
                           httpOnly: true}) 
          
            return res.json({accessToken:tokens.accessToken})
@@ -103,18 +103,19 @@ class AuthController {
         try {
           const {fingerprint} = req.body
           const {refreshToken} = req.cookies;
-           console.log('------------------------------------------')
-            console.log(refreshToken)
-            console.log('---------------------------------------')
+          console.log('REFRESHTOKEN')
+          console.log(refreshToken)
             if (!refreshToken) {
+              
               return res.status(401).json({msg: "Не авторизован"})
           }
           const userData = tokenService.validateRefreshToken(refreshToken);
           const tokenFromDb = await tokenService.findToken(refreshToken);
           if (!userData || !tokenFromDb) {
-              
+            console.log('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
             return res.status(401).json({msg: "Не авторизован"})
           }
+          
           const user = await User.findByPk(userData.id);
           const userDto = new UserDto(user);
           const tokens = tokenService.generateTokens({...userDto});
@@ -123,7 +124,7 @@ class AuthController {
           res.cookie('refreshToken', 
                        tokens.refreshToken, 
                        { maxAge: 30 * 24 * 60 * 60 * 1000,
-                        path: '/api/auth/refresh', 
+                        path: '/api/auth', 
                          httpOnly: true}) 
         
           return res.json({accessToken:tokens.accessToken})
@@ -138,13 +139,21 @@ class AuthController {
 
       async forgotPassword(req, res) {
         try {
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) {
+            const error = errors.array().reduce((err, item)=>{
+              return err + item.msg
+            },'')
+           
+             return res.status(400).json({ msg: error });
+           }
             const {email} = req.body
             const user = await User.findOne({where:{email}})
-            if(!user) return res.status(400).json({msg: "This email does not exist."})
-            
-           const access_token = tokenService.createAccessToken({id: user.id})
-
-            const url = `${process.env.CLIENT_URL}/auth/reset/${access_token}`
+            if(!user)  return res.status(400).json({msg:"Данный email не существует!!!!"})
+           
+           //const access_token = tokenService.createAccessToken({id: user.id})
+           const reset_password_token = tokenService.createResetPasswordToken({id: user.id})
+            const url = `${process.env.CLIENT_URL}/auth/reset/${reset_password_token}`
             await mailService.sendResetPasswordMail(email, url)
                       
             res.json({msg: "На вашу почту было отправлено письмо!!"})
@@ -155,13 +164,24 @@ class AuthController {
       }
       async resetPassword(req, res) {
         try {
-            const {password} = req.body
-            console.log(password)
-            const passwordHash = await bcrypt.hash(password, 12)
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) {
+            const error = errors.array().reduce((err, item)=>{
+              return err + item.msg
+            },'')
+             return res.status(400).json({ msg: error });
+           }
+            const {password, reset_password_token} = req.body
+            const user = tokenService.validateResetPasswordToken(reset_password_token)
+            console.log('Сброс пароля - ', user)
+            if(!user){
+                return res.status(400).json({msg: "Время для сброса пароля истекло! Попробуйте снова!"}) 
+            }
+             const passwordHash = await bcrypt.hash(password, 12)
 
             await User.update({ password: passwordHash }, {
                 where: {
-                  id: req.user.id
+                  id: user.id
                 }
               });
 
@@ -174,7 +194,7 @@ class AuthController {
       async logout(req, res) {
         try {
          const {refreshToken} = req.cookies;
-          
+        console.log('refreshtoken', refreshToken)
          await tokenService.removeToken(refreshToken);
         
         res.clearCookie('refreshToken');

@@ -6,6 +6,7 @@ module.exports = function (req, res, next) {
     }
     try {
         const authorizationHeader = req.headers.authorization;
+        
         if (!authorizationHeader) {
             return res.status(401).json({msg: "Не авторизован"})
         }
@@ -21,7 +22,7 @@ module.exports = function (req, res, next) {
         }
         req.user = decoded
         next()
-    } catch (e) {
-        res.status(401).json({msg: "Не авторизован"})
+    } catch (error) {
+        return res.status(500).json({msg: error.message})
     }
 };
