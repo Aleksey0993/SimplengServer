@@ -8,6 +8,7 @@ const authAdmin = require('../middleware/authAdmin')
 
 router.get('/user', auth, grammarController.listUser)
 router.post('/user', auth, authAdmin, grammarController.addUser)
+router.get('/grammar', grammarController.getAll)
 
 
 
