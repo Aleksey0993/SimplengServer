@@ -2,6 +2,7 @@
 const { User } = require("../models/authModel");
 const { Grammar } = require("../models/grammarModel");
 const { Op } = require("sequelize");
+const { Sequelize } = require("../db");
 //const tokenService = require('../service/tokenService')
 //const mailService = require('../service/mailService')
 //const UserDto = require('../dtos/user-dto')
@@ -22,9 +23,12 @@ class GrammarController {
   async getAll(req, res) {
     try {
       // let {brandId, typeId, limit, page} = req.query
+
+      const { size, page, title } = req.query;
+
+      console.log("ttiiiiiiiitleeee-", title);
       const user = await User.findByPk(req.user.id);
-      const { size, page } = req.query;
-      const { title } = req.body;
+      //const user = await User.findByPk(id);
       let conditionPublished = [true];
       if (user.role === "ADMIN") {
         conditionPublished = [true, false];
@@ -38,6 +42,7 @@ class GrammarController {
         : { published: { [Op.in]: conditionPublished } };
       const { limit, offset } = getPagination(page, size);
       const data = await Grammar.findAndCountAll({
+        order: ["id"],
         where: condition,
         limit,
         offset,
@@ -49,17 +54,49 @@ class GrammarController {
     }
   }
 
-  async listUser(req, res) {
+  async getOne(req, res) {
     try {
-      const users = await User.findAll();
-      return res.json({ users: users });
+      const { id } = req.params;
+      const data = await Grammar.findByPk(id);
+
+      res.json(data);
     } catch (error) {
       return res.status(500).json({ msg: error.message });
     }
   }
 
-  async addUser(req, res) {
+  async create(req, res) {
     try {
+      const { title, description, published } = req.body;
+      const data = await Grammar.create({ title, description, published });
+      return res.json(data);
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
+
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { title, description, published } = req.body;
+      const data = await Grammar.update(
+        {
+          title,
+          description,
+          published,
+        },
+        { where: { id: id } }
+      );
+      return res.json(data);
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      const data = await Grammar.destroy({ where: { id: id } });
+      return res.json(data);
     } catch (error) {
       return res.status(500).json({ msg: error.message });
     }
