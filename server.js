@@ -6,6 +6,7 @@ const router = require("./routes/index");
 const cookieParser = require("cookie-parser");
 const fileUpload = require("express-fileupload");
 const path = require("path");
+const cleanTokenService = require("./service/cleanTokenService");
 
 const PORT = process.env.PORT || 5000;
 
@@ -27,6 +28,9 @@ const start = async () => {
     await sequelize.authenticate();
     await sequelize.sync();
     app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+    cleanTokenService.task.start();
+
+    //task.task.start();
   } catch (e) {
     console.log(e);
   }
