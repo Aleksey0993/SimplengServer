@@ -2,7 +2,8 @@
 const uuid = require("uuid");
 const path = require("path");
 const { User } = require("../models/authModel");
-const { Grammar } = require("../models/grammarModel");
+const { Listening, ListeningTest } = require("../models/listeningModel");
+//const { Grammar } = require("../models/grammarModel");
 const { Op } = require("sequelize");
 const fs = require("fs");
 const { Sequelize } = require("../db");
@@ -22,7 +23,7 @@ const getPagingData = (data, page, limit) => {
   const totalPages = Math.ceil(totalItems / limit);
   return { totalItems, grammars, totalPages, currentPage };
 };
-class GrammarController {
+class ListeningController {
   async getAll(req, res) {
     try {
       // let {brandId, typeId, limit, page} = req.query
@@ -77,20 +78,31 @@ class GrammarController {
 
   async create(req, res) {
     try {
-      const { title, description, published } = req.body;
-      if (!title) {
-        return res
-          .status(400)
-          .json({ msg: "Пожалуйста укажите название темы!" });
+      if (!req.files) {
+        return res.status(400).json({ msg: "Пожалуйста загрузите файл" });
       }
-      console.log("новое название темы - ", title.length);
-      const repeatTitle = await Grammar.findOne({ where: { title: title } });
+      const { audio } = req.files;
+      if (!audio.mimetype.includes("audio")) {
+        return res.status(400).json({ msg: "Файл должен быть аудиофайлом" });
+      }
+
+      const { title } = req.body;
+      if (!title) {
+        return res.status(400).json({ msg: "Пожалуйста укажите название" });
+      }
+      // return res.status(400).json({ msg: "Пожалуйста укажите название!!!!" });
+      // console.log("новое название темы - ", title.length);
+      const repeatTitle = await Listening.findOne({ where: { title: title } });
       if (repeatTitle) {
         return res
           .status(400)
           .json({ msg: `Данное название темы уже существует! ` });
       }
-      const data = await Grammar.create({ title, description, published });
+
+      let fileName = "audio_" + uuid.v4() + ".mp3";
+      audio.mv(path.resolve(__dirname, "..", "static/audio", fileName));
+
+      const data = await Listening.create({ title, fileName });
       console.log("created grammar --- ", data.dataValues.id);
       return res.status(201).json({
         msg: `Тема ${data.dataValues.title} успешно создана!`,
@@ -162,4 +174,4 @@ class GrammarController {
   }
 }
 
-module.exports = new GrammarController();
+module.exports = new ListeningController();
