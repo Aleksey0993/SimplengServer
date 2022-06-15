@@ -18,10 +18,10 @@ const getPagination = (page, size) => {
   return { limit, offset };
 };
 const getPagingData = (data, page, limit) => {
-  const { count: totalItems, rows: grammars } = data;
+  const { count: totalItems, rows: listening } = data;
   const currentPage = +page || 1;
   const totalPages = Math.ceil(totalItems / limit);
-  return { totalItems, grammars, totalPages, currentPage };
+  return { totalItems, listening, totalPages, currentPage };
 };
 class ListeningController {
   async getAll(req, res) {
@@ -30,11 +30,16 @@ class ListeningController {
 
       const { size, page, title } = req.query;
 
-      console.log("ttiiiiiiiitleeee-", size, " - ", page, " - ", title);
-      const user = await User.findByPk(req.user.id);
+      //const user = await User.findByPk(req.user.id);
       //const user = await User.findByPk(id);
       let conditionPublished = [true];
-      if (user.role === "ADMIN") {
+      let conditionFullAccess = [true, false];
+
+      if (req.user.role == "USER") {
+        conditionFullAccess = [false];
+      }
+
+      if (req.user.role === "ADMIN") {
         conditionPublished = [true, false];
       }
 
@@ -42,19 +47,21 @@ class ListeningController {
         ? {
             title: { [Op.iLike]: `%${title}%` },
             published: { [Op.in]: conditionPublished },
+            fullAccess: { [Op.in]: conditionFullAccess },
           }
-        : { published: { [Op.in]: conditionPublished } };
+        : {
+            published: { [Op.in]: conditionPublished },
+            fullAccess: { [Op.in]: conditionFullAccess },
+          };
       const { limit, offset } = getPagination(page, size);
-      console.log("limit", limit);
-      console.log("offset", offset);
-      const data = await Grammar.findAndCountAll({
+
+      const data = await Listening.findAndCountAll({
         order: ["id"],
         where: condition,
         limit,
         offset,
       });
       const response = getPagingData(data, page, limit);
-      console.log("RESPONSE", response);
       return res.json(response);
     } catch (error) {
       return res.status(500).json({ msg: error.message });
@@ -64,12 +71,15 @@ class ListeningController {
   async getOne(req, res) {
     try {
       const { id } = req.params;
-      const data = await Grammar.findByPk(id);
-      console.log("одна запись в бд");
-      console.log(data);
+      const data = await Listening.findByPk(id);
+      console.log("daataaa - ", data);
       if (!data) {
         return res.status(404).json({ msg: "Данных нет" });
       }
+      if (data.dataValues.fullAccess && req.user.role == "USER") {
+        return res.status(403).json({ msg: "Нет доступа" });
+      }
+
       return res.json(data);
     } catch (error) {
       return res.status(500).json({ msg: error.message });
@@ -82,6 +92,7 @@ class ListeningController {
         return res.status(400).json({ msg: "Пожалуйста загрузите файл" });
       }
       const { audio } = req.files;
+      console.log("00000000000000000000- ", audio);
       if (!audio.mimetype.includes("audio")) {
         return res.status(400).json({ msg: "Файл должен быть аудиофайлом" });
       }
@@ -116,12 +127,12 @@ class ListeningController {
   async update(req, res) {
     try {
       const { id } = req.params;
-      const { title, description, published } = req.body;
-      const data = await Grammar.update(
+      const { title, published, fullAccess } = req.body;
+      await Listening.update(
         {
           title,
-          description,
           published,
+          fullAccess,
         },
         { where: { id: id } }
       );
@@ -133,13 +144,100 @@ class ListeningController {
   async delete(req, res) {
     try {
       const { id } = req.params;
-      await Grammar.destroy({ where: { id: id } });
+      const data = await Listening.findByPk(id);
+      console.log("delete - ", data.dataValues.fileName);
+      const fullPath = path.resolve(
+        __dirname,
+        "..",
+        "static/audio",
+        data.dataValues.fileName
+      );
+      fs.unlinkSync(fullPath);
+      await Listening.destroy({ where: { id: id } });
+
       return res.json({ msg: `Успешно удалено!` });
     } catch (error) {
       return res.status(500).json({ msg: error.message });
     }
   }
 
+  async getAllTest(req, res) {
+    try {
+      const { id } = req.params;
+      const data = await ListeningTest.findAll({
+        order: ["id"],
+        where: { listeningId: id },
+      });
+      return res.json(data);
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
+
+  async createTest(req, res) {
+    try {
+      const { questions, answer } = req.body;
+      const { id } = req.params;
+      if (!questions) {
+        return res.status(400).json({ msg: "Пожалуйста укажите название" });
+      }
+      // return res.status(400).json({ msg: "Пожалуйста укажите название!!!!" });
+      // console.log("новое название темы - ", title.length);
+      // const repeatTitle = await Listening.findOne({ where: { title: title } });
+      // if (repeatTitle) {
+      //   return res
+      //     .status(400)
+      //     .json({ msg: `Данное название темы уже существует! ` });
+      // }
+
+      // let fileName = "audio_" + uuid.v4() + ".mp3";
+      // audio.mv(path.resolve(__dirname, "..", "static/audio", fileName));
+
+      const newData = await ListeningTest.create({
+        questions,
+        answer,
+        listeningId: id,
+      });
+      const data = {
+        id: newData.dataValues.id,
+        questions: newData.dataValues.questions,
+        answer: newData.dataValues.answer,
+      };
+      //  console.log("created grammar --- ", data.dataValues.id);
+      return res.status(201).json(data);
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
+
+  async updateTest(req, res) {
+    try {
+      const { id, _id } = req.params;
+
+      const { questions, answer } = req.body;
+      await ListeningTest.update(
+        {
+          questions,
+          answer,
+        },
+        { where: { id: _id } }
+      );
+      return res.json({ msg: `Успешно сохранено!` });
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
+  async deleteTest(req, res) {
+    try {
+      const { id } = req.params;
+
+      const data = await ListeningTest.destroy({ where: { id: id } });
+      console.log("delete data", data);
+      return res.json({ msg: `Успешно удалено!` });
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  }
   async uploadImage(req, res) {
     try {
       // const { id } = req.params;
